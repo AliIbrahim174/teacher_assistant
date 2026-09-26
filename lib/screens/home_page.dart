@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/book_record.dart';
 import '../services/book_storage_service.dart';
 import 'book_details_page.dart';
-import 'zoom_test_page.dart';
+import 'lesson_session_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.loadBooksOverride});
@@ -223,14 +223,23 @@ class _HomePageState extends State<HomePage> {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ElevatedButton(
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ZoomTestPage()),
-                  );
-                },
-                child: const Text('اختبار Zoom'),
-              ),
+  onPressed: () {
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            const LessonSessionPage(),
+      ),
+    );
+
+  },
+
+  child:
+      const Text(
+        'بدء حصة تجريبية',
+      ),
+),
             ),
 
             const SizedBox(height: 10),
