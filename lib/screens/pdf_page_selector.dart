@@ -5,24 +5,28 @@ import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
 
 import 'teaching_board_page.dart';
+import '../services/lesson_storage_service.dart';
 
 class PdfPageSelector extends StatefulWidget {
   const PdfPageSelector({
     super.key,
+    required this.bookId,
     required this.pdfPath,
     required this.bookName,
   });
 
+  final String bookId;
   final String pdfPath;
   final String bookName;
-
   @override
   State<PdfPageSelector> createState() => _PdfPageSelectorState();
 }
 
 class _PdfPageSelectorState extends State<PdfPageSelector> {
   PdfDocument? _document;
+  final LessonStorageService _lessonStorage = LessonStorageService.instance;
 
+  bool _creatingLesson = false;
   final Set<int> _selectedPages = {};
 
   final Map<int, Future<Uint8List?>> _thumbnailFutures = {};
@@ -161,25 +165,117 @@ class _PdfPageSelectorState extends State<PdfPageSelector> {
   }
 
   Future<void> _confirmSelection() async {
-    if (_selectedPages.isEmpty) {
-      _showMessage('اختاري صفحة واحدة على الأقل.');
+    if (_selectedPages.isEmpty || _creatingLesson) {
+      if (_selectedPages.isEmpty) {
+        _showMessage('اختاري صفحة واحدة على الأقل.');
+      }
 
       return;
     }
 
     final pages = _selectedPages.toList()..sort();
 
-    debugPrint('Selected PDF pages: $pages');
+    final lessonName = await _askLessonName();
 
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TeachingBoardPage(
-          pdfPath: widget.pdfPath,
-          bookName: widget.bookName,
-          pages: pages,
+    if (!mounted || lessonName == null) {
+      return;
+    }
+
+    setState(() {
+      _creatingLesson = true;
+    });
+
+    try {
+      final lesson = await _lessonStorage.createLesson(
+        bookId: widget.bookId,
+        name: lessonName,
+        pages: pages,
+      );
+
+      if (!mounted) return;
+
+      debugPrint(
+        'Created lesson '
+        '${lesson.id}: ${lesson.pages}',
+      );
+
+      await Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => TeachingBoardPage(
+            pdfPath: widget.pdfPath,
+            bookName: widget.bookName,
+            pages: lesson.pages,
+            lessonId: lesson.id,
+            lessonName: lesson.name,
+          ),
         ),
-      ),
+      );
+    } catch (e) {
+      debugPrint('Create lesson error: $e');
+
+      if (!mounted) return;
+
+      _showMessage('تعذر إنشاء الحصة.');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _creatingLesson = false;
+        });
+      }
+    }
+  }
+
+  Future<String?> _askLessonName() async {
+    final controller = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('اسم الحصة'),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            textDirection: TextDirection.rtl,
+            decoration: const InputDecoration(
+              hintText: 'مثال: الدرس الأول',
+              border: OutlineInputBorder(),
+            ),
+            onSubmitted: (value) {
+              final name = value.trim();
+
+              if (name.isNotEmpty) {
+                Navigator.pop(dialogContext, name);
+              }
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text('إلغاء'),
+            ),
+            FilledButton(
+              onPressed: () {
+                final name = controller.text.trim();
+
+                if (name.isEmpty) {
+                  return;
+                }
+
+                Navigator.pop(dialogContext, name);
+              },
+              child: const Text('إنشاء الحصة'),
+            ),
+          ],
+        );
+      },
     );
+
+    controller.dispose();
+
+    return result;
   }
 
   void _showMessage(String message) {
@@ -309,11 +405,21 @@ class _PdfPageSelectorState extends State<PdfPageSelector> {
                   const Spacer(),
 
                   FilledButton.icon(
-                    onPressed: _selectedPages.isEmpty
+                    onPressed: _selectedPages.isEmpty || _creatingLesson
                         ? null
                         : _confirmSelection,
-                    icon: const Icon(Icons.arrow_forward),
-                    label: const Text('استخدام الصفحات'),
+                    icon: _creatingLesson
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.arrow_forward),
+                    label: Text(
+                      _creatingLesson
+                          ? 'جارٍ إنشاء الحصة...'
+                          : 'استخدام الصفحات',
+                    ),
                   ),
                 ],
               ),

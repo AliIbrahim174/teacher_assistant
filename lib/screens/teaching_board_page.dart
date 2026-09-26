@@ -15,6 +15,8 @@ class TeachingBoardPage extends StatefulWidget {
     required this.pdfPath,
     required this.bookName,
     required this.pages,
+    required this.lessonId,
+    required this.lessonName,
   });
 
   final String pdfPath;
@@ -22,6 +24,9 @@ class TeachingBoardPage extends StatefulWidget {
   final String bookName;
 
   final List<int> pages;
+  final String lessonId;
+
+  final String lessonName;
 
   @override
   State<TeachingBoardPage> createState() => _TeachingBoardPageState();
@@ -727,17 +732,32 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
               const SizedBox(width: 4),
 
               SizedBox(
-                width: 150,
-                child: Text(
-                  widget.bookName,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
+                width: 190,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.bookName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      widget.lessonName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-
               const SizedBox(width: 12),
 
               _toolButton(BoardTool.pen, Icons.edit, 'قلم'),

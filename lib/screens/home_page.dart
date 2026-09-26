@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../models/book_record.dart';
 import '../services/book_storage_service.dart';
-import 'pdf_page_selector.dart';
+import 'book_details_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key, this.loadBooksOverride});
@@ -111,12 +111,9 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _openBook(BookRecord book) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) =>
-            PdfPageSelector(pdfPath: book.filePath, bookName: book.name),
-      ),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => BookDetailsPage(book: book)));
   }
 
   void _showMessage(String message) {

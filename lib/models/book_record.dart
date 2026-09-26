@@ -23,17 +23,13 @@ class BookRecord {
     };
   }
 
-  factory BookRecord.fromJson(
-    Map<String, dynamic> json,
-  ) {
+  factory BookRecord.fromJson(Map<String, dynamic> json) {
     return BookRecord(
       id: json['id'] as String,
       name: json['name'] as String,
       filePath: json['filePath'] as String,
       pageCount: json['pageCount'] as int,
-      addedAt: DateTime.parse(
-        json['addedAt'] as String,
-      ),
+      addedAt: DateTime.parse(json['addedAt'] as String),
     );
   }
 }
