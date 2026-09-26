@@ -1,7 +1,10 @@
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:pdfx/pdfx.dart';
+
+import 'selected_pages_preview.dart';
 
 class PdfPageSelector extends StatefulWidget {
   const PdfPageSelector({
@@ -22,15 +25,19 @@ class _PdfPageSelectorState
     extends State<PdfPageSelector> {
   PdfDocument? _document;
 
-  final Map<int, Uint8List> _thumbnails = {};
-
   final Set<int> _selectedPages = {};
 
+  final Map<int, Future<Uint8List?>>
+      _thumbnailFutures = {};
+
+  Future<void> _renderQueue =
+      Future.value();
+
   bool _loadingDocument = true;
-  bool _loadingThumbnails = false;
+
+  String? _errorMessage;
 
   int _pagesCount = 0;
-  int _renderedPages = 0;
 
   @override
   void initState() {
@@ -53,12 +60,10 @@ class _PdfPageSelectorState
 
       setState(() {
         _document = document;
-        _pagesCount = document.pagesCount;
+        _pagesCount =
+            document.pagesCount;
         _loadingDocument = false;
-        _loadingThumbnails = true;
       });
-
-      await _renderThumbnails();
     } catch (e) {
       debugPrint(
         'PDF open error: $e',
@@ -68,95 +73,106 @@ class _PdfPageSelectorState
 
       setState(() {
         _loadingDocument = false;
+        _errorMessage =
+            'تعذر فتح الكتاب.';
       });
-
-      _showMessage(
-        'تعذر فتح الكتاب.',
-      );
     }
   }
 
-  Future<void> _renderThumbnails() async {
-    final document = _document;
+  Future<Uint8List?>
+      _thumbnailFor(
+    int pageNumber,
+  ) {
+    return _thumbnailFutures
+        .putIfAbsent(
+      pageNumber,
+      () {
+        final completer =
+            Completer<Uint8List?>();
 
-    if (document == null) return;
+        _renderQueue =
+            _renderQueue.then(
+          (_) async {
+            if (!mounted) {
+              if (!completer.isCompleted) {
+                completer.complete(null);
+              }
 
-    /*
-     * Render sequentially on purpose.
-     *
-     * Android's PdfRenderer should not have several
-     * pages open simultaneously. Each page is closed
-     * before the next one is opened.
-     */
+              return;
+            }
 
-    for (int pageNumber = 1;
-        pageNumber <= _pagesCount;
-        pageNumber++) {
-      if (!mounted) return;
+            final document =
+                _document;
 
-      PdfPage? page;
+            if (document == null) {
+              if (!completer.isCompleted) {
+                completer.complete(null);
+              }
 
-      try {
-        page = await document.getPage(
-          pageNumber,
+              return;
+            }
+
+            PdfPage? page;
+
+            try {
+              page =
+                  await document.getPage(
+                pageNumber,
+              );
+
+              final sourceWidth =
+                  page.width.toDouble();
+
+              final sourceHeight =
+                  page.height.toDouble();
+
+              const width = 220.0;
+
+              final scale =
+                  width / sourceWidth;
+
+              final height =
+                  sourceHeight * scale;
+
+              final rendered =
+                  await page.render(
+                width: width,
+                height: height,
+                format:
+                    PdfPageImageFormat
+                        .png,
+                backgroundColor:
+                    '#FFFFFF',
+              );
+
+              if (!completer
+                  .isCompleted) {
+                completer.complete(
+                  rendered?.bytes,
+                );
+              }
+            } catch (e) {
+              debugPrint(
+                'Thumbnail '
+                '$pageNumber error: $e',
+              );
+
+              if (!completer
+                  .isCompleted) {
+                completer.complete(null);
+              }
+            } finally {
+              if (page != null &&
+                  !page.isClosed) {
+                await page.close();
+              }
+            }
+          },
         );
 
-        final sourceWidth =
-            page.width.toDouble();
-
-        final sourceHeight =
-            page.height.toDouble();
-
-        const thumbnailWidth = 220.0;
-
-        final scale =
-            thumbnailWidth / sourceWidth;
-
-        final thumbnailHeight =
-            sourceHeight * scale;
-
-        final rendered =
-            await page.render(
-          width: thumbnailWidth,
-          height: thumbnailHeight,
-          format:
-              PdfPageImageFormat.png,
-          backgroundColor: '#FFFFFF',
-        );
-
-        if (!mounted) {
-          await page.close();
-          return;
-        }
-
-        final bytes = rendered?.bytes;
-
-        if (bytes != null) {
-          setState(() {
-            _thumbnails[pageNumber] =
-                bytes;
-
-            _renderedPages =
-                pageNumber;
-          });
-        }
-      } catch (e) {
-        debugPrint(
-          'Page $pageNumber render error: $e',
-        );
-      } finally {
-        if (page != null &&
-            !page.isClosed) {
-          await page.close();
-        }
-      }
-    }
-
-    if (!mounted) return;
-
-    setState(() {
-      _loadingThumbnails = false;
-    });
+        return completer.future;
+      },
+    );
   }
 
   void _togglePage(
@@ -196,45 +212,33 @@ class _PdfPageSelectorState
     });
   }
 
-  void _confirmSelection() {
+  Future<void>
+      _confirmSelection() async {
     if (_selectedPages.isEmpty) {
       _showMessage(
         'اختاري صفحة واحدة على الأقل.',
       );
+
       return;
     }
 
     final pages =
-        _selectedPages.toList()..sort();
-
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text(
-            'تم اختيار الصفحات',
-          ),
-          content: Text(
-            'الصفحات: ${pages.join('، ')}',
-            textDirection:
-                TextDirection.rtl,
-          ),
-          actions: [
-            FilledButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text(
-                'حسنًا',
-              ),
-            ),
-          ],
-        );
-      },
-    );
+        _selectedPages.toList()
+          ..sort();
 
     debugPrint(
       'Selected PDF pages: $pages',
+    );
+
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            SelectedPagesPreview(
+          pdfPath: widget.pdfPath,
+          bookName: widget.bookName,
+          pages: pages,
+        ),
+      ),
     );
   }
 
@@ -290,6 +294,20 @@ class _PdfPageSelectorState
       );
     }
 
+    if (_errorMessage != null) {
+      return Scaffold(
+        appBar: AppBar(),
+        body: Center(
+          child: Text(
+            _errorMessage!,
+            style: const TextStyle(
+              fontSize: 20,
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor:
           const Color(0xfff5f6f8),
@@ -326,6 +344,7 @@ class _PdfPageSelectorState
               'اختيار الكل',
             ),
           ),
+
           TextButton.icon(
             onPressed:
                 _selectedPages.isEmpty
@@ -338,31 +357,12 @@ class _PdfPageSelectorState
               'إلغاء التحديد',
             ),
           ),
+
           const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
-          if (_loadingThumbnails)
-            LinearProgressIndicator(
-              value: _pagesCount == 0
-                  ? null
-                  : _renderedPages /
-                      _pagesCount,
-            ),
-
-          if (_loadingThumbnails)
-            Padding(
-              padding:
-                  const EdgeInsets.all(
-                8,
-              ),
-              child: Text(
-                'جارٍ تجهيز الصفحات '
-                '$_renderedPages / $_pagesCount',
-              ),
-            ),
-
           Expanded(
             child: GridView.builder(
               padding:
@@ -385,9 +385,10 @@ class _PdfPageSelectorState
                 return _PageCard(
                   pageNumber:
                       pageNumber,
-                  imageBytes:
-                      _thumbnails[
-                          pageNumber],
+                  thumbnail:
+                      _thumbnailFor(
+                    pageNumber,
+                  ),
                   selected:
                       _selectedPages
                           .contains(
@@ -429,7 +430,8 @@ class _PdfPageSelectorState
                             .isEmpty
                         ? 'لم يتم اختيار صفحات'
                         : 'تم اختيار '
-                            '${_selectedPages.length} صفحة',
+                            '${_selectedPages.length}'
+                            ' صفحة',
                     style:
                         const TextStyle(
                       fontSize: 17,
@@ -467,14 +469,17 @@ class _PageCard
     extends StatelessWidget {
   const _PageCard({
     required this.pageNumber,
-    required this.imageBytes,
+    required this.thumbnail,
     required this.selected,
     required this.onTap,
   });
 
   final int pageNumber;
-  final Uint8List? imageBytes;
+
+  final Future<Uint8List?> thumbnail;
+
   final bool selected;
+
   final VoidCallback onTap;
 
   @override
@@ -497,23 +502,48 @@ class _PageCard
                   const EdgeInsets.all(
                 6,
               ),
-              child: imageBytes == null
-                  ? const Center(
+              child:
+                  FutureBuilder<
+                      Uint8List?>(
+                future: thumbnail,
+                builder:
+                    (context, snapshot) {
+                  if (snapshot
+                          .connectionState !=
+                      ConnectionState.done) {
+                    return const Center(
                       child:
                           CircularProgressIndicator(),
-                    )
-                  : Image.memory(
-                      imageBytes!,
-                      fit: BoxFit.contain,
-                      gaplessPlayback:
-                          true,
-                    ),
+                    );
+                  }
+
+                  final bytes =
+                      snapshot.data;
+
+                  if (bytes == null) {
+                    return const Center(
+                      child: Icon(
+                        Icons
+                            .broken_image_outlined,
+                        size: 40,
+                      ),
+                    );
+                  }
+
+                  return Image.memory(
+                    bytes,
+                    fit: BoxFit.contain,
+                    gaplessPlayback: true,
+                  );
+                },
+              ),
             ),
 
             Positioned(
               top: 8,
               right: 8,
-              child: AnimatedContainer(
+              child:
+                  AnimatedContainer(
                 duration:
                     const Duration(
                   milliseconds: 150,
@@ -523,7 +553,9 @@ class _PageCard
                 decoration:
                     BoxDecoration(
                   color: selected
-                      ? Theme.of(context)
+                      ? Theme.of(
+                          context,
+                        )
                           .colorScheme
                           .primary
                       : Colors.white,
