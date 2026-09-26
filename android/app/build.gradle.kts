@@ -20,16 +20,12 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.alikhedr.mom_teacher_assistant"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = flutter.minSdkVersion
+        minSdk = 28
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
-
     buildTypes {
         release {
             // TODO: Add your own signing config for the release build.
@@ -37,8 +33,23 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+packaging {
+    jniLibs {
+        useLegacyPackaging = true
+    }
+
+    resources {
+        excludes += "com/zipow/videobox/IPhoneZRCService.aidl"
+    }
+}
+
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation(project(":mobilertc"))
 }

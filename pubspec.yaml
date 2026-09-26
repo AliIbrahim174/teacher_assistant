@@ -37,6 +37,8 @@ dependencies:
   path: ^1.9.1
   path_provider: ^2.1.6
   pdfx: ^2.11.0
+  http: ^1.2.2
+  dart_jsonwebtoken: ^2.14.1
     
 dev_dependencies:
   flutter_test:
