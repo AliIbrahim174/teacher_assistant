@@ -75,6 +75,26 @@ class _BookDetailsPageState extends State<BookDetailsPage> {
           pages: lesson.pages,
           lessonId: lesson.id,
           lessonName: lesson.name,
+          classSession: false,
+        ),
+      ),
+    );
+
+    if (!mounted) return;
+
+    await _loadLessons();
+  }
+
+  Future<void> _startClass(LessonRecord lesson) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TeachingBoardPage(
+          pdfPath: widget.book.filePath,
+          bookName: widget.book.name,
+          pages: lesson.pages,
+          lessonId: lesson.id,
+          lessonName: lesson.name,
+          classSession: true,
         ),
       ),
     );
@@ -204,7 +224,20 @@ class _BookDetailsPageState extends State<BookDetailsPage> {
                       '${_pagesText(lesson)}',
                     ),
                   ),
-                  trailing: const Icon(Icons.arrow_back_ios_new),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: () {
+                          _startClass(lesson);
+                        },
+                        icon: const Icon(Icons.play_arrow_rounded),
+                        label: const Text('بدء الحصة'),
+                      ),
+                      const SizedBox(width: 10),
+                      const Icon(Icons.arrow_back_ios_new),
+                    ],
+                  ),
                   onTap: () {
                     _openLesson(lesson);
                   },

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
@@ -8,8 +9,6 @@ import 'package:pdfx/pdfx.dart';
 import '../models/board_item.dart';
 import '../painters/board_painter.dart';
 import '../painters/grid_painter.dart';
-
-import 'dart:async';
 import '../services/lesson_storage_service.dart';
 
 class TeachingBoardPage extends StatefulWidget {
@@ -20,8 +19,8 @@ class TeachingBoardPage extends StatefulWidget {
     required this.pages,
     required this.lessonId,
     required this.lessonName,
+    this.classSession = false,
   });
-
   final String pdfPath;
 
   final String bookName;
@@ -30,6 +29,7 @@ class TeachingBoardPage extends StatefulWidget {
   final String lessonId;
 
   final String lessonName;
+  final bool classSession;
 
   @override
   State<TeachingBoardPage> createState() => _TeachingBoardPageState();
@@ -38,7 +38,17 @@ class TeachingBoardPage extends StatefulWidget {
 class _TeachingBoardPageState extends State<TeachingBoardPage>
     with WidgetsBindingObserver {
   static const double _gridSize = 20;
+  Timer? _sessionTimer;
 
+  final ValueNotifier<Duration> _sessionElapsed = ValueNotifier<Duration>(
+    Duration.zero,
+  );
+
+  DateTime? _sessionStartedAt;
+
+  bool _endingClass = false;
+
+  bool _endDialogOpen = false;
   PdfDocument? _document;
   final LessonStorageService _lessonStorage = LessonStorageService.instance;
   Map<int, List<Map<String, dynamic>>> _serializeAnnotations() {
@@ -178,8 +188,41 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+    if (widget.classSession) {
+      _startSessionClock();
+    }
 
     _initialize();
+  }
+
+  void _startSessionClock() {
+    _sessionStartedAt = DateTime.now();
+
+    _sessionElapsed.value = Duration.zero;
+
+    _sessionTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final startedAt = _sessionStartedAt;
+
+      if (startedAt == null) {
+        return;
+      }
+
+      _sessionElapsed.value = DateTime.now().difference(startedAt);
+    });
+  }
+
+  String _formatSessionTime(Duration duration) {
+    final hours = duration.inHours;
+
+    final minutes = duration.inMinutes.remainder(60).toString().padLeft(2, '0');
+
+    final seconds = duration.inSeconds.remainder(60).toString().padLeft(2, '0');
+
+    if (hours > 0) {
+      return '$hours:$minutes:$seconds';
+    }
+
+    return '$minutes:$seconds';
   }
 
   Future<void> _initialize() async {
@@ -562,10 +605,6 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
 
         _markAnnotationsChanged();
 
-        setState(() {
-          _activeFreehand = null;
-        });
-
         break;
 
       case BoardTool.eraser:
@@ -629,9 +668,10 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
                 width: axisWidth,
               ),
             );
-            _markAnnotationsChanged();
             _currentRedoItems.clear();
           });
+
+          _markAnnotationsChanged();
         }
 
         setState(() {
@@ -653,6 +693,66 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
       _dragStart = null;
 
       _dragCurrent = null;
+    });
+  }
+
+  Future<void> _requestEndClass() async {
+    if (_endingClass || _endDialogOpen) {
+      return;
+    }
+
+    _endDialogOpen = true;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('إنهاء الحصة'),
+          content: const Text(
+            'هل تريدين إنهاء الحصة الآن؟ سيتم حفظ جميع الكتابات تلقائيًا.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext, false);
+              },
+              child: const Text('الاستمرار في الحصة'),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                Navigator.pop(dialogContext, true);
+              },
+              icon: const Icon(Icons.stop_circle_outlined),
+              label: const Text('إنهاء الحصة'),
+            ),
+          ],
+        );
+      },
+    );
+
+    _endDialogOpen = false;
+
+    if (confirmed != true || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _endingClass = true;
+    });
+
+    _sessionTimer?.cancel();
+
+    await _saveAnnotationsNow();
+
+    if (!mounted) return;
+
+    // PopScope now allows this route
+    // to close safely.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     });
   }
 
@@ -780,6 +880,9 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _sessionTimer?.cancel();
+
+    _sessionElapsed.dispose();
 
     _renderRequestId++;
 
@@ -798,11 +901,13 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    final scaffold = Scaffold(
       backgroundColor: const Color(0xffdfe2e6),
       body: SafeArea(
         child: Column(
           children: [
+            if (widget.classSession) _buildSessionBar(),
+
             _buildToolbar(),
 
             Expanded(child: _buildBoardArea()),
@@ -811,6 +916,22 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
           ],
         ),
       ),
+    );
+
+    if (!widget.classSession) {
+      return scaffold;
+    }
+
+    return PopScope(
+      canPop: _endingClass,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) {
+          return;
+        }
+
+        unawaited(_requestEndClass());
+      },
+      child: scaffold,
     );
   }
 
@@ -912,8 +1033,8 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
           child: Row(
             children: [
               IconButton(
-                tooltip: 'رجوع',
-                onPressed: _exitBoard,
+                tooltip: widget.classSession ? 'إنهاء الحصة' : 'رجوع',
+                onPressed: widget.classSession ? _requestEndClass : _exitBoard,
                 icon: const Icon(Icons.arrow_forward),
               ),
 
@@ -1040,6 +1161,90 @@ class _TeachingBoardPageState extends State<TeachingBoardPage>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildSessionBar() {
+    final scheme = Theme.of(context).colorScheme;
+
+    return Material(
+      elevation: 2,
+      color: scheme.secondaryContainer,
+      child: SizedBox(
+        height: 62,
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          child: Row(
+            children: [
+              Icon(Icons.circle, size: 12, color: Colors.green.shade700),
+
+              const SizedBox(width: 7),
+
+              const Text(
+                'الحصة قيد التشغيل',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+
+              const SizedBox(width: 16),
+
+              ValueListenableBuilder<Duration>(
+                valueListenable: _sessionElapsed,
+                builder: (context, elapsed, child) {
+                  return Chip(
+                    avatar: const Icon(Icons.timer_outlined, size: 18),
+                    label: Text(_formatSessionTime(elapsed)),
+                  );
+                },
+              ),
+
+              const SizedBox(width: 10),
+
+              const Chip(
+                avatar: Icon(Icons.video_call_outlined, size: 18),
+                label: Text('Zoom غير متصل'),
+              ),
+
+              const SizedBox(width: 12),
+
+              _buildReservedControl(icon: Icons.mic, label: 'الميكروفون'),
+
+              _buildReservedControl(icon: Icons.videocam, label: 'الكاميرا'),
+
+              _buildReservedControl(
+                icon: Icons.people_outline,
+                label: 'المشاركون',
+              ),
+
+              const SizedBox(width: 14),
+
+              FilledButton.icon(
+                onPressed: _endingClass ? null : _requestEndClass,
+                style: FilledButton.styleFrom(
+                  backgroundColor: scheme.error,
+                  foregroundColor: scheme.onError,
+                ),
+                icon: const Icon(Icons.stop_circle_outlined),
+                label: Text(_endingClass ? 'جارٍ الحفظ...' : 'إنهاء الحصة'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReservedControl({
+    required IconData icon,
+    required String label,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3),
+      child: OutlinedButton.icon(
+        onPressed: null,
+        icon: Icon(icon, size: 18),
+        label: Text(label),
       ),
     );
   }
