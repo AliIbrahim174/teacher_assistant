@@ -16,12 +16,10 @@ class SelectedPagesPreview extends StatefulWidget {
   final List<int> pages;
 
   @override
-  State<SelectedPagesPreview> createState() =>
-      _SelectedPagesPreviewState();
+  State<SelectedPagesPreview> createState() => _SelectedPagesPreviewState();
 }
 
-class _SelectedPagesPreviewState
-    extends State<SelectedPagesPreview> {
+class _SelectedPagesPreviewState extends State<SelectedPagesPreview> {
   PdfDocument? _document;
 
   Uint8List? _pageImage;
@@ -34,8 +32,7 @@ class _SelectedPagesPreviewState
 
   int _renderRequestId = 0;
 
-  int get _currentPageNumber =>
-      widget.pages[_currentIndex];
+  int get _currentPageNumber => widget.pages[_currentIndex];
 
   @override
   void initState() {
@@ -46,9 +43,7 @@ class _SelectedPagesPreviewState
 
   Future<void> _openDocument() async {
     try {
-      final document = await PdfDocument.openFile(
-        widget.pdfPath,
-      );
+      final document = await PdfDocument.openFile(widget.pdfPath);
 
       if (!mounted) {
         await document.close();
@@ -59,16 +54,13 @@ class _SelectedPagesPreviewState
 
       await _renderCurrentPage();
     } catch (e) {
-      debugPrint(
-        'Preview PDF open error: $e',
-      );
+      debugPrint('Preview PDF open error: $e');
 
       if (!mounted) return;
 
       setState(() {
         _loading = false;
-        _errorMessage =
-            'تعذر فتح صفحات الكتاب.';
+        _errorMessage = 'تعذر فتح صفحات الكتاب.';
       });
     }
   }
@@ -89,23 +81,17 @@ class _SelectedPagesPreviewState
     PdfPage? page;
 
     try {
-      page = await document.getPage(
-        _currentPageNumber,
-      );
+      page = await document.getPage(_currentPageNumber);
 
-      final sourceWidth =
-          page.width.toDouble();
+      final sourceWidth = page.width.toDouble();
 
-      final sourceHeight =
-          page.height.toDouble();
+      final sourceHeight = page.height.toDouble();
 
       const targetWidth = 1600.0;
 
-      final scale =
-          targetWidth / sourceWidth;
+      final scale = targetWidth / sourceWidth;
 
-      final targetHeight =
-          sourceHeight * scale;
+      final targetHeight = sourceHeight * scale;
 
       final rendered = await page.render(
         width: targetWidth,
@@ -114,8 +100,7 @@ class _SelectedPagesPreviewState
         backgroundColor: '#FFFFFF',
       );
 
-      if (!mounted ||
-          requestId != _renderRequestId) {
+      if (!mounted || requestId != _renderRequestId) {
         return;
       }
 
@@ -124,31 +109,25 @@ class _SelectedPagesPreviewState
         _loading = false;
       });
     } catch (e) {
-      debugPrint(
-        'Preview page render error: $e',
-      );
+      debugPrint('Preview page render error: $e');
 
-      if (!mounted ||
-          requestId != _renderRequestId) {
+      if (!mounted || requestId != _renderRequestId) {
         return;
       }
 
       setState(() {
         _loading = false;
-        _errorMessage =
-            'تعذر عرض هذه الصفحة.';
+        _errorMessage = 'تعذر عرض هذه الصفحة.';
       });
     } finally {
-      if (page != null &&
-          !page.isClosed) {
+      if (page != null && !page.isClosed) {
         await page.close();
       }
     }
   }
 
   Future<void> _nextPage() async {
-    if (_currentIndex >=
-        widget.pages.length - 1) {
+    if (_currentIndex >= widget.pages.length - 1) {
       return;
     }
 
@@ -177,8 +156,7 @@ class _SelectedPagesPreviewState
 
     final document = _document;
 
-    if (document != null &&
-        !document.isClosed) {
+    if (document != null && !document.isClosed) {
       document.close();
     }
 
@@ -188,21 +166,13 @@ class _SelectedPagesPreviewState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(0xffe9eaed),
+      backgroundColor: const Color(0xffe9eaed),
       appBar: AppBar(
-        title: Text(
-          widget.bookName,
-          overflow: TextOverflow.ellipsis,
-        ),
+        title: Text(widget.bookName, overflow: TextOverflow.ellipsis),
       ),
       body: Column(
         children: [
-          Expanded(
-            child: Center(
-              child: _buildPage(),
-            ),
-          ),
+          Expanded(child: Center(child: _buildPage())),
 
           _buildNavigationBar(),
         ],
@@ -217,12 +187,7 @@ class _SelectedPagesPreviewState
         children: [
           CircularProgressIndicator(),
           SizedBox(height: 14),
-          Text(
-            'جارٍ تجهيز الصفحة...',
-            style: TextStyle(
-              fontSize: 18,
-            ),
-          ),
+          Text('جارٍ تجهيز الصفحة...', style: TextStyle(fontSize: 18)),
         ],
       );
     }
@@ -231,17 +196,9 @@ class _SelectedPagesPreviewState
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(
-            Icons.error_outline,
-            size: 60,
-          ),
+          const Icon(Icons.error_outline, size: 60),
           const SizedBox(height: 12),
-          Text(
-            _errorMessage!,
-            style: const TextStyle(
-              fontSize: 18,
-            ),
-          ),
+          Text(_errorMessage!, style: const TextStyle(fontSize: 18)),
         ],
       );
     }
@@ -249,9 +206,7 @@ class _SelectedPagesPreviewState
     final bytes = _pageImage;
 
     if (bytes == null) {
-      return const Text(
-        'تعذر عرض الصفحة.',
-      );
+      return const Text('تعذر عرض الصفحة.');
     }
 
     return Padding(
@@ -259,11 +214,7 @@ class _SelectedPagesPreviewState
       child: Material(
         elevation: 5,
         color: Colors.white,
-        child: Image.memory(
-          bytes,
-          fit: BoxFit.contain,
-          gaplessPlayback: true,
-        ),
+        child: Image.memory(bytes, fit: BoxFit.contain, gaplessPlayback: true),
       ),
     );
   }
@@ -272,49 +223,33 @@ class _SelectedPagesPreviewState
     return SafeArea(
       top: false,
       child: Container(
-        padding: const EdgeInsets.symmetric(
-          horizontal: 20,
-          vertical: 10,
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         color: Colors.white,
         child: Row(
           children: [
             FilledButton.tonalIcon(
-              onPressed:
-                  _currentIndex == 0 ||
-                          _loading
-                      ? null
-                      : _previousPage,
-              icon: const Icon(
-                Icons.arrow_forward,
-              ),
-              label: const Text(
-                'السابق',
-              ),
+              onPressed: _currentIndex == 0 || _loading ? null : _previousPage,
+              icon: const Icon(Icons.arrow_forward),
+              label: const Text('السابق'),
             ),
 
             const Spacer(),
 
             Column(
-              mainAxisSize:
-                  MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
                   'صفحة $_currentPageNumber',
                   style: const TextStyle(
                     fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
                 Text(
                   '${_currentIndex + 1}'
                   ' من '
                   '${widget.pages.length}',
-                  style: TextStyle(
-                    color:
-                        Colors.grey.shade700,
-                  ),
+                  style: TextStyle(color: Colors.grey.shade700),
                 ),
               ],
             ),
@@ -322,20 +257,11 @@ class _SelectedPagesPreviewState
             const Spacer(),
 
             FilledButton.tonalIcon(
-              onPressed:
-                  _currentIndex ==
-                              widget.pages
-                                      .length -
-                                  1 ||
-                          _loading
-                      ? null
-                      : _nextPage,
-              icon: const Icon(
-                Icons.arrow_back,
-              ),
-              label: const Text(
-                'التالي',
-              ),
+              onPressed: _currentIndex == widget.pages.length - 1 || _loading
+                  ? null
+                  : _nextPage,
+              icon: const Icon(Icons.arrow_back),
+              label: const Text('التالي'),
             ),
           ],
         ),

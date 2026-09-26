@@ -21,23 +21,21 @@ class _HomePageState extends State<HomePage> {
     });
 
     try {
-final file = await FilePicker.pickFile(
-  type: FileType.custom,
-  allowedExtensions: ['pdf'],
-);
+      final file = await FilePicker.pickFile(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
 
-if (!mounted) return;
+      if (!mounted) return;
 
-if (file == null) {
-  return;
-}
+      if (file == null) {
+        return;
+      }
 
-final path = file.path;
+      final path = file.path;
 
       if (path == null) {
-        _showMessage(
-          'تعذر فتح الملف، برجاء اختيار ملف PDF محفوظ على الجهاز.',
-        );
+        _showMessage('تعذر فتح الملف، برجاء اختيار ملف PDF محفوظ على الجهاز.');
         return;
       }
 
@@ -52,9 +50,7 @@ final path = file.path;
     } catch (e) {
       if (!mounted) return;
 
-      _showMessage(
-        'حدث خطأ أثناء فتح الكتاب.',
-      );
+      _showMessage('حدث خطأ أثناء فتح الكتاب.');
 
       debugPrint('PDF picker error: $e');
     } finally {
@@ -68,10 +64,7 @@ final path = file.path;
 
   String _cleanFileName(String name) {
     if (name.toLowerCase().endsWith('.pdf')) {
-      return name.substring(
-        0,
-        name.length - 4,
-      );
+      return name.substring(0, name.length - 4);
     }
 
     return name;
@@ -79,12 +72,7 @@ final path = file.path;
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          message,
-          textDirection: TextDirection.rtl,
-        ),
-      ),
+      SnackBar(content: Text(message, textDirection: TextDirection.rtl)),
     );
   }
 
@@ -92,12 +80,7 @@ final path = file.path;
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xfff7f8fa),
-      appBar: AppBar(
-        title: const Text(
-          'مساعد المعلمة',
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('مساعد المعلمة'), centerTitle: true),
       body: Center(
         child: _openingBook
             ? const Column(
@@ -105,60 +88,38 @@ final path = file.path;
                 children: [
                   CircularProgressIndicator(),
                   SizedBox(height: 16),
-                  Text(
-                    'جارٍ فتح الكتاب...',
-                    style: TextStyle(
-                      fontSize: 18,
-                    ),
-                  ),
+                  Text('جارٍ فتح الكتاب...', style: TextStyle(fontSize: 18)),
                 ],
               )
             : Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.menu_book_rounded,
-                    size: 90,
-                  ),
+                  const Icon(Icons.menu_book_rounded, size: 90),
                   const SizedBox(height: 20),
                   const Text(
                     'الكتب',
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'أضيفي الكتاب ثم اختاري صفحات الحصة',
-                    style: TextStyle(
-                      fontSize: 18,
-                      color: Colors.grey.shade700,
-                    ),
+                    style: TextStyle(fontSize: 18, color: Colors.grey.shade700),
                   ),
                   const SizedBox(height: 32),
                   FilledButton.icon(
                     onPressed: _addBook,
                     style: FilledButton.styleFrom(
-                      padding:
-                          const EdgeInsets.symmetric(
+                      padding: const EdgeInsets.symmetric(
                         horizontal: 32,
                         vertical: 18,
                       ),
-                      textStyle:
-                          const TextStyle(
+                      textStyle: const TextStyle(
                         fontSize: 20,
-                        fontWeight:
-                            FontWeight.w600,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
-                    icon: const Icon(
-                      Icons.add,
-                    ),
-                    label: const Text(
-                      'إضافة كتاب',
-                    ),
+                    icon: const Icon(Icons.add),
+                    label: const Text('إضافة كتاب'),
                   ),
                 ],
               ),
