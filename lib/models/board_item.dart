@@ -8,6 +8,8 @@ abstract class BoardItem {
   void draw(Canvas canvas);
 
   bool hitTest(Offset point);
+
+  Map<String, dynamic> toJson();
 }
 
 class FreehandItem extends BoardItem {
@@ -81,6 +83,16 @@ class FreehandItem extends BoardItem {
 
     return false;
   }
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'type': 'freehand',
+      'color': color.toARGB32(),
+      'width': width,
+      'points': points.map((point) => {'x': point.dx, 'y': point.dy}).toList(),
+    };
+  }
 }
 
 class LineItem extends BoardItem {
@@ -114,6 +126,17 @@ class LineItem extends BoardItem {
   bool hitTest(Offset point) {
     return distancePointToLine(point, start, end) < 20;
   }
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'type': 'line',
+      'color': color.toARGB32(),
+      'width': width,
+      'start': {'x': start.dx, 'y': start.dy},
+      'end': {'x': end.dx, 'y': end.dy},
+    };
+  }
 }
 
 class AxisItem extends BoardItem {
@@ -125,11 +148,8 @@ class AxisItem extends BoardItem {
   });
 
   final Offset origin;
-
   final double extent;
-
   final Color color;
-
   final double width;
 
   @override
@@ -214,6 +234,78 @@ class AxisItem extends BoardItem {
     return distancePointToLine(point, horizontalStart, horizontalEnd) < 20 ||
         distancePointToLine(point, verticalStart, verticalEnd) < 20;
   }
+
+  @override
+  Map<String, dynamic> toJson() {
+    return {
+      'type': 'axis',
+      'color': color.toARGB32(),
+      'width': width,
+      'extent': extent,
+      'origin': {'x': origin.dx, 'y': origin.dy},
+    };
+  }
+}
+
+BoardItem? boardItemFromJson(Map<String, dynamic> json) {
+  try {
+    final type = json['type'] as String;
+
+    final color = Color((json['color'] as num).toInt());
+
+    final width = (json['width'] as num).toDouble();
+
+    switch (type) {
+      case 'freehand':
+        final rawPoints = json['points'] as List;
+
+        final points = rawPoints.map((rawPoint) {
+          final point = Map<String, dynamic>.from(rawPoint as Map);
+
+          return Offset(
+            (point['x'] as num).toDouble(),
+            (point['y'] as num).toDouble(),
+          );
+        }).toList();
+
+        return FreehandItem(points: points, color: color, width: width);
+
+      case 'line':
+        final start = Map<String, dynamic>.from(json['start'] as Map);
+
+        final end = Map<String, dynamic>.from(json['end'] as Map);
+
+        return LineItem(
+          start: Offset(
+            (start['x'] as num).toDouble(),
+            (start['y'] as num).toDouble(),
+          ),
+          end: Offset(
+            (end['x'] as num).toDouble(),
+            (end['y'] as num).toDouble(),
+          ),
+          color: color,
+          width: width,
+        );
+
+      case 'axis':
+        final origin = Map<String, dynamic>.from(json['origin'] as Map);
+
+        return AxisItem(
+          origin: Offset(
+            (origin['x'] as num).toDouble(),
+            (origin['y'] as num).toDouble(),
+          ),
+          extent: (json['extent'] as num).toDouble(),
+          color: color,
+          width: width,
+        );
+    }
+  } catch (e) {
+    debugPrint('Board item restore error: $e');
+  }
+
+  return null;
 }
 
 double distancePointToLine(Offset point, Offset start, Offset end) {

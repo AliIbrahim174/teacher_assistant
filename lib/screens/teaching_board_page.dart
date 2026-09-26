@@ -9,6 +9,9 @@ import '../models/board_item.dart';
 import '../painters/board_painter.dart';
 import '../painters/grid_painter.dart';
 
+import 'dart:async';
+import '../services/lesson_storage_service.dart';
+
 class TeachingBoardPage extends StatefulWidget {
   const TeachingBoardPage({
     super.key,
@@ -32,11 +35,98 @@ class TeachingBoardPage extends StatefulWidget {
   State<TeachingBoardPage> createState() => _TeachingBoardPageState();
 }
 
-class _TeachingBoardPageState extends State<TeachingBoardPage> {
+class _TeachingBoardPageState extends State<TeachingBoardPage>
+    with WidgetsBindingObserver {
   static const double _gridSize = 20;
 
   PdfDocument? _document;
+  final LessonStorageService _lessonStorage = LessonStorageService.instance;
+  Map<int, List<Map<String, dynamic>>> _serializeAnnotations() {
+    final result = <int, List<Map<String, dynamic>>>{};
 
+    for (final entry in _itemsByPage.entries) {
+      if (entry.value.isEmpty) {
+        continue;
+      }
+
+      result[entry.key] = entry.value.map((item) => item.toJson()).toList();
+    }
+
+    return result;
+  }
+
+  void _markAnnotationsChanged() {
+    _annotationRevision++;
+
+    _autosaveTimer?.cancel();
+
+    _autosaveTimer = Timer(const Duration(milliseconds: 600), () {
+      unawaited(_saveAnnotationsNow());
+    });
+  }
+
+  Future<void> _saveAnnotationsNow() async {
+    _autosaveTimer?.cancel();
+    _autosaveTimer = null;
+
+    if (_annotationRevision == _savedRevision) {
+      await _saveChain;
+      return;
+    }
+
+    final revisionToSave = _annotationRevision;
+
+    final snapshot = _serializeAnnotations();
+
+    _saveChain = _saveChain.then((_) async {
+      try {
+        final saved = await _lessonStorage.saveAnnotations(
+          lessonId: widget.lessonId,
+          annotations: snapshot,
+        );
+
+        if (saved == null) {
+          debugPrint(
+            'Autosave failed: '
+            'lesson not found.',
+          );
+
+          return;
+        }
+
+        if (revisionToSave > _savedRevision) {
+          _savedRevision = revisionToSave;
+        }
+      } catch (e) {
+        debugPrint(
+          'Autosave annotations '
+          'error: $e',
+        );
+      }
+    });
+
+    await _saveChain;
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.hidden) {
+      _autosaveTimer?.cancel();
+
+      unawaited(_saveAnnotationsNow());
+    }
+  }
+
+  Timer? _autosaveTimer;
+
+  Future<void> _saveChain = Future.value();
+
+  int _annotationRevision = 0;
+
+  int _savedRevision = 0;
   final Map<int, Uint8List> _pageCache = {};
 
   final Map<int, double> _pageAspectRatios = {};
@@ -87,7 +177,73 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
   void initState() {
     super.initState();
 
-    _openDocument();
+    WidgetsBinding.instance.addObserver(this);
+
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    final lessonLoaded = await _loadSavedAnnotations();
+
+    if (!mounted || !lessonLoaded) {
+      return;
+    }
+
+    await _openDocument();
+  }
+
+  Future<bool> _loadSavedAnnotations() async {
+    try {
+      final lesson = await _lessonStorage.loadLesson(widget.lessonId);
+
+      if (lesson == null) {
+        if (!mounted) {
+          return false;
+        }
+
+        setState(() {
+          _loadingPage = false;
+          _errorMessage = 'تعذر تحميل بيانات الحصة.';
+        });
+
+        return false;
+      }
+
+      final restored = <int, List<BoardItem>>{};
+
+      for (final entry in lesson.annotations.entries) {
+        final items = <BoardItem>[];
+
+        for (final rawItem in entry.value) {
+          final item = boardItemFromJson(rawItem);
+
+          if (item != null) {
+            items.add(item);
+          }
+        }
+
+        restored[entry.key] = items;
+      }
+
+      _itemsByPage
+        ..clear()
+        ..addAll(restored);
+
+      return true;
+    } catch (e) {
+      debugPrint('Load annotations error: $e');
+
+      if (!mounted) {
+        return false;
+      }
+
+      setState(() {
+        _loadingPage = false;
+        _errorMessage = 'تعذر تحميل الكتابة المحفوظة.';
+      });
+
+      return false;
+    }
   }
 
   Future<void> _openDocument() async {
@@ -390,7 +546,7 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
 
           _currentRedoItems.clear();
         });
-
+        _markAnnotationsChanged();
         return;
       }
     }
@@ -400,6 +556,12 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
     switch (_tool) {
       case BoardTool.pen:
       case BoardTool.highlighter:
+        setState(() {
+          _activeFreehand = null;
+        });
+
+        _markAnnotationsChanged();
+
         setState(() {
           _activeFreehand = null;
         });
@@ -427,6 +589,7 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
 
             _currentRedoItems.clear();
           });
+          _markAnnotationsChanged();
         }
 
         setState(() {
@@ -466,7 +629,7 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
                 width: axisWidth,
               ),
             );
-
+            _markAnnotationsChanged();
             _currentRedoItems.clear();
           });
         }
@@ -511,6 +674,8 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
     setState(() {
       _currentRedoItems.add(items.removeLast());
     });
+
+    _markAnnotationsChanged();
   }
 
   void _redo() {
@@ -523,6 +688,8 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
     setState(() {
       _currentItems.add(redo.removeLast());
     });
+
+    _markAnnotationsChanged();
   }
 
   Future<void> _clearCurrentPage() async {
@@ -563,6 +730,7 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
 
       _currentRedoItems.clear();
     });
+    _markAnnotationsChanged();
   }
 
   Future<void> _nextPage() async {
@@ -571,6 +739,10 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
     }
 
     _resetPointerState();
+
+    await _saveAnnotationsNow();
+
+    if (!mounted) return;
 
     setState(() {
       _currentIndex++;
@@ -586,6 +758,10 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
 
     _resetPointerState();
 
+    await _saveAnnotationsNow();
+
+    if (!mounted) return;
+
     setState(() {
       _currentIndex--;
     });
@@ -593,9 +769,23 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
     await _renderCurrentPage();
   }
 
+  Future<void> _exitBoard() async {
+    await _saveAnnotationsNow();
+
+    if (!mounted) return;
+
+    Navigator.pop(context);
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+
     _renderRequestId++;
+
+    _autosaveTimer?.cancel();
+
+    unawaited(_saveAnnotationsNow());
 
     final document = _document;
 
@@ -723,9 +913,7 @@ class _TeachingBoardPageState extends State<TeachingBoardPage> {
             children: [
               IconButton(
                 tooltip: 'رجوع',
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+                onPressed: _exitBoard,
                 icon: const Icon(Icons.arrow_forward),
               ),
 

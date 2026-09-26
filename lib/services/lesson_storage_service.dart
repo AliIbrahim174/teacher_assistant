@@ -121,4 +121,32 @@ class LessonStorageService {
 
     return lessons;
   }
+
+  Future<LessonRecord?> saveAnnotations({
+    required String lessonId,
+    required Map<int, List<Map<String, dynamic>>> annotations,
+  }) async {
+    final lesson = await loadLesson(lessonId);
+
+    if (lesson == null) {
+      return null;
+    }
+
+    final safeAnnotations = <int, List<Map<String, dynamic>>>{};
+
+    for (final entry in annotations.entries) {
+      safeAnnotations[entry.key] = entry.value
+          .map((item) => Map<String, dynamic>.from(item))
+          .toList();
+    }
+
+    final updatedLesson = lesson.copyWith(
+      updatedAt: DateTime.now(),
+      annotations: safeAnnotations,
+    );
+
+    await saveLesson(updatedLesson);
+
+    return updatedLesson;
+  }
 }
